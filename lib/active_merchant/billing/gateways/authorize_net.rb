@@ -176,11 +176,27 @@ module ActiveMerchant
         end
       end
 
-      def verify(credit_card, options = {})
+      def verify(payment_method, options = {})
+        amount = define_amount_for_verify(payment_method, options)
+
         MultiResponse.run(:use_first_response) do |r|
-          r.process { authorize(100, credit_card, options) }
-          r.process(:ignore_result) { void(r.authorization, options) }
+          r.process { authorize(amount, payment_method, options) }
+          r.process(:ignore_result) { void(r.authorization, options) } unless amount == 0
         end
+      end
+
+      def define_amount_for_verify(payment_method, options)
+        return 100 unless options[:verify_amount].present?
+
+        return options[:verify_amount] if payment_method.is_a?(CreditCard) && options[:verify_amount].class == Integer && options[:verify_amount] > 0
+
+        requires!(options, :billing_address) if options[:verify_amount] == 0
+        requires!(options[:billing_address], :address1, :zip) if options[:verify_amount] == 0
+        return 0 if options[:verify_amount] == 0
+
+        return options[:verify_amount] if options[:verify_amount].class == Integer && options[:verify_amount] > 0
+
+        raise ArgumentError, 'verify_amount value must be an integer and greater than zero'
       end
 
       def store(credit_card, options = {})
